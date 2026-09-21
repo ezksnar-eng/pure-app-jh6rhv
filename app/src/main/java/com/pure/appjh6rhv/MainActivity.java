@@ -26,12 +26,12 @@ public class MainActivity extends Activity {
 
     private static final String START_URL = "https://appassets.androidplatform.net/assets/www/index.html";
     private static final boolean BUNDLED = true;
-    private static final boolean FULLSCREEN = true;
+    private static final boolean FULLSCREEN = false;
     private static final boolean ALLOW_ZOOM = false;
     private static final boolean LIGHT_STATUS = false;
     private static final String STATUS_COLOR = "#c81466";
-    private static final String LIVE_BASE = "";
-    private static final long BUNDLED_VERSION = 1790016684L;
+    private static final String LIVE_BASE = "https://raw.githubusercontent.com/ezksnar-eng/pure-app-jh6rhv/main/live/";
+    private static final long BUNDLED_VERSION = 1790016921L;
     private static final String ENTRY = "index.html";
     private static final String ASSET_HOST = "appassets.androidplatform.net";
     private static final int FILE_REQ = 4242;
