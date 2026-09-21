@@ -1,0 +1,11 @@
+allprojects {
+    configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            def r = details.requested
+            if (r.group == 'org.jetbrains.kotlin' && (r.name == 'kotlin-stdlib-jdk7' || r.name == 'kotlin-stdlib-jdk8') && r.version != null) {
+                details.useTarget("org.jetbrains.kotlin:kotlin-stdlib:${r.version}")
+                details.because('merged into kotlin-stdlib since Kotlin 1.8')
+            }
+        }
+    }
+}

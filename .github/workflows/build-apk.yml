@@ -1,0 +1,48 @@
+name: Build APK
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "live/**"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Build APK
+        run: |
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew -I pure-init.gradle assembleDebug --no-daemon --console=plain
+          else
+            gradle -I pure-init.gradle assembleDebug --no-daemon --console=plain
+          fi
+      - name: Collect APK
+        run: |
+          apk=$(find . -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          test -n "$apk" || { echo "APK not found"; exit 1; }
+          cp "$apk" app.apk
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-apk
+          path: app.apk
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest app.apk --target "$GITHUB_SHA" --title "APK" --notes "Built with Pure App Builder"
