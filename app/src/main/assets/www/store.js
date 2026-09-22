@@ -85,7 +85,21 @@ const Store = (function () {
   async function init() {
     await openLocal();
 
-    // 1) نحاول Firebase أول
+    // تنظيف مرة وحدة بس: نسخ سابقة من التطبيق كانت تحفظ 3 أعمال وهمية
+    // بذاكرة المتصفح المحلية (IndexedDB) لو فشل الاتصال بقاعدة البيانات.
+    // حذف دالة التوليد من الكود ما يمسح شي محفوظ سابقاً بجهازك — هذا
+    // السطر يمسحه فعلياً، مرة وحدة بس، بغض النظر عن حالة الاتصال الحالية.
+    if (!localStorage.getItem('pm_local_cache_wiped_v1')) {
+      try {
+        const oldWorks = await idbGetAll('works');
+        for (const w of oldWorks) await idbDelete('works', w.id);
+        const oldChapters = await idbGetAll('chapters');
+        for (const c of oldChapters) await idbDelete('chapters', c.id);
+      } catch (e) { console.error('تعذّر تنظيف الذاكرة المحلية القديمة:', e); }
+      localStorage.setItem('pm_local_cache_wiped_v1', '1');
+    }
+
+    // نحاول Firebase أول
     if (window.CONFIG && CONFIG.firebaseConfig && CONFIG.firebaseConfig.apiKey) {
       try {
         const appMod = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js');
