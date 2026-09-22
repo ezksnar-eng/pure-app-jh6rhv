@@ -55,8 +55,10 @@ const Store = (function () {
   function normalizeWork(raw) {
     if (!raw) return raw;
     const w = Object.assign({}, raw);
-    if (!w.cover && w.coverUrl) w.cover = w.coverUrl; // الحقل ممكن يجي بأي وحدة من الاسمين
+    if (!w.cover && w.coverUrl) w.cover = w.coverUrl;
+    if (!w.cover && w.image) w.cover = w.image;
     if (w.sourceSite && !w.source) w.source = w.sourceSite;
+    if (typeof w.avgRating !== 'number' && typeof w.rating === 'number') w.avgRating = w.rating;
     if (typeof w.chapters !== 'number') {
       const m = String(w.latestChapter || '').match(/(\d+)/);
       w.chapters = m ? Number(m[1]) : 0;
@@ -73,6 +75,16 @@ const Store = (function () {
     w.createdAt = toMillis(w.createdAt);
     w.updatedAt = toMillis(w.updatedAt);
     return w;
+  }
+  // فصل قد يجي بحقول (order, images) بدل (number, pages) — نوحّدها هنا
+  function normalizeChapter(raw, workId, id) {
+    const c = Object.assign({ id, workId }, raw);
+    if (typeof c.number !== 'number' && typeof c.order === 'number') c.number = c.order;
+    if (typeof c.number !== 'number') c.number = 0;
+    if (!Array.isArray(c.pages) && Array.isArray(c.images)) c.pages = c.images;
+    if (!Array.isArray(c.pages)) c.pages = [];
+    if (!c.title) c.title = '';
+    return c;
   }
 
   const api = {
@@ -100,7 +112,7 @@ const Store = (function () {
     }
 
     // نحاول Firebase أول
-    if (window.CONFIG && CONFIG.firebaseConfig && CONFIG.firebaseConfig.apiKey) {
+    if (typeof CONFIG !== 'undefined' && CONFIG.firebaseConfig && CONFIG.firebaseConfig.apiKey) {
       try {
         const appMod = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js');
         const fsMod = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
@@ -115,7 +127,7 @@ const Store = (function () {
     }
 
     // 2) إذا Firebase ما اشتغل، نجرب Supabase
-    if (mode === 'local' && window.CONFIG && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase && window.supabase.createClient) {
+    if (mode === 'local' && typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase && window.supabase.createClient) {
       sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
       mode = 'supabase';
     }
@@ -185,7 +197,7 @@ const Store = (function () {
     if (mode === 'firebase') {
       try {
         const snap = await FS.getDocs(FS.collection(db, WORKS_COLLECTION, workId, 'chapters'));
-        return snap.docs.map((d) => Object.assign({ id: d.id, workId }, d.data()));
+        return snap.docs.map((d) => normalizeChapter(d.data(), workId, d.id));
       } catch (e) {
         console.error('تعذّر قراءة فصول العمل', workId, e);
         return [];
@@ -194,21 +206,22 @@ const Store = (function () {
     if (mode === 'supabase') {
       const { data, error } = await sb.from('chapters').select('data').eq('work_id', workId);
       if (error) { console.error(error); return []; }
-      return (data || []).map((r) => r.data);
+      return (data || []).map((r) => normalizeChapter(r.data, workId, r.data.id));
     }
-    return (await idbGetAll('chapters')).filter((c) => c.workId === workId);
+    return (await idbGetAll('chapters')).filter((c) => c.workId === workId).map((c) => normalizeChapter(c, workId, c.id));
   };
   api.getChapter = async function (workId, id) {
     if (mode === 'firebase') {
       const d = await FS.getDoc(FS.doc(db, WORKS_COLLECTION, workId, 'chapters', id));
-      return d.exists() ? Object.assign({ id: d.id, workId }, d.data()) : undefined;
+      return d.exists() ? normalizeChapter(d.data(), workId, d.id) : undefined;
     }
     if (mode === 'supabase') {
       const { data, error } = await sb.from('chapters').select('data').eq('id', id).maybeSingle();
       if (error || !data) return undefined;
-      return data.data;
+      return normalizeChapter(data.data, workId, id);
     }
-    return idbGet('chapters', id);
+    const c = await idbGet('chapters', id);
+    return c ? normalizeChapter(c, workId, id) : undefined;
   };
   api.putChapter = async function (c) {
     if (mode === 'firebase') {

@@ -52,3 +52,8 @@ const CONFIG = {
     measurementId: "G-YS8VFDXVKZ"
   },
 };
+// مهم جداً: `const` بأعلى ملف سكربت عادي ما ينحط تلقائياً على window —
+// وهذا كان بالضبط سبب فشل الاتصال بكل النسخ الماضية (store.js كان
+// يتأكد من window.CONFIG قبل ما يكمل، وهذا كان دائماً undefined رغم
+// إن CONFIG نفسه معرّف صح). هذا السطر يصلحها نهائياً:
+window.CONFIG = CONFIG;

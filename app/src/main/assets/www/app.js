@@ -127,7 +127,7 @@ function renderDrawer(){
     const active = route.name===it.name ? 'active':'';
     const special = it.special ? 'drawer-upload':'';
     return `<div class="drawer-item ${active} ${special}" data-nav="${it.name}">${it.icon}<span>${it.label}</span></div>`;
-  }).join('') + `<div class="drawer-foot">نسخة 8 — ${Store.mode==='firebase'?'متصلة بـFirebase':(Store.mode==='supabase'?'متصلة بـSupabase':'وضع محلي (ماكو اتصال بقاعدة بيانات)')}${Store.error? '<br><span style="color:var(--danger)">'+esc(Store.error)+'</span>':''}</div>`;
+  }).join('') + `<div class="drawer-foot">نسخة 9 — ${Store.mode==='firebase'?'متصلة بـFirebase':(Store.mode==='supabase'?'متصلة بـSupabase':'وضع محلي (ماكو اتصال بقاعدة بيانات)')}${Store.error? '<br><span style="color:var(--danger)">'+esc(Store.error)+'</span>':''}</div>`;
   el.querySelectorAll('[data-nav]').forEach(n=>{
     n.onclick=()=>{ closeDrawer(); nav({name:n.dataset.nav}); };
   });
