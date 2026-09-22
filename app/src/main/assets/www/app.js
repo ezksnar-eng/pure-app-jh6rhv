@@ -142,8 +142,6 @@ const DRAWER_ITEMS = [
   {name:'favChars', label:'شخصياتي المفضلة', icon:ICON.heart},
   {name:'popularChars', label:'الشخصيات الاكثر شعبية', icon:ICON.bars},
   {name:'recommend', label:'التوصيات', icon:ICON.puzzle},
-  '-',
-  {name:'upload', label:'مجلد روابط', icon:ICON.link, special:true},
 ];
 function renderDrawer(){
   const el=document.getElementById('drawer');
@@ -207,7 +205,7 @@ async function pageHome(){
   const works = (await Store.getWorks()).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   setView(`
     ${topbar('أخر التحديثات',{search:true})}
-    ${works.length? `<div class="grid">${works.map(workCard).join('')}</div>` : emptyState('لا توجد أعمال بعد','ابدأ بإضافة أول عمل من "مجلد روابط" في القائمة الجانبية')}
+    ${works.length? `<div class="grid">${works.map(workCard).join('')}</div>` : emptyState('لا توجد أعمال بعد','الأعمال تظهر هنا تلقائياً بمجرد إضافتها لقاعدة البيانات')}
   `);
   bindCards(document);
 }
@@ -252,7 +250,7 @@ async function pageGenres(){
   const genres = [...set].sort((a,b)=>a.localeCompare('ar'));
   setView(`
     ${topbar('الأنواع')}
-    ${genres.length? `<div class="tags" style="justify-content:flex-start;padding:16px">${genres.map(g=>`<span class="tag" style="cursor:pointer;padding:9px 18px;font-size:13.5px" data-genre="${esc(g)}">${esc(g)}</span>`).join('')}</div>` : emptyState('لا توجد أنواع بعد','أضف تصنيفات للأعمال من مجلد روابط')}
+    ${genres.length? `<div class="tags" style="justify-content:flex-start;padding:16px">${genres.map(g=>`<span class="tag" style="cursor:pointer;padding:9px 18px;font-size:13.5px" data-genre="${esc(g)}">${esc(g)}</span>`).join('')}</div>` : emptyState('لا توجد أنواع بعد','تصنيفات الأعمال تظهر هنا تلقائياً من قاعدة البيانات')}
   `);
   document.querySelectorAll('[data-genre]').forEach(el=>{
     el.onclick=()=> nav({name:'genreList', genre:el.dataset.genre});
@@ -367,7 +365,7 @@ async function pageSchedule(){
       <div class="chapter-row" data-open="${w.id}">
         <div class="ch-name">${esc(w.title)}</div>
         <div style="color:var(--accent);font-size:13px;font-weight:700">${esc(w.nextReleaseDate)}</div>
-      </div>`).join('') : emptyState('لا توجد مواعيد مضافة بعد','أضف تاريخ الفصل القادم عند إنشاء أو تعديل عمل من مجلد روابط')}
+      </div>`).join('') : emptyState('لا توجد مواعيد مضافة بعد','مواعيد الفصول تظهر هنا تلقائياً إذا كانت مضافة بقاعدة البيانات')}
   `);
   document.querySelectorAll('[data-open]').forEach(el=> el.onclick=()=> nav({name:'details', id:el.dataset.open, tab:'details'}));
 }
@@ -471,7 +469,7 @@ function detailsTab(w, personal){
 }
 
 function chaptersTab(w, chapters, personal, downloadedIds){
-  if(!chapters.length) return emptyState('لا توجد فصول بعد','أضف أول فصل من مجلد روابط في القائمة الجانبية');
+  if(!chapters.length) return emptyState('لا توجد فصول بعد','الفصول تظهر هنا تلقائياً بمجرد إضافتها لقاعدة البيانات');
   const sorted=[...chapters].sort((a,b)=>b.number-a.number);
   return sorted.map((c,i)=>{
     const read = (personal.readChapterIds||[]).includes(c.id);
@@ -665,271 +663,11 @@ async function pageReader(workId, chId){
   };
 }
 
-/* ============================================================
-   مجلد روابط — إضافة أعمال منسوبة لمواقع مصدر + رفع فصولها
-   ============================================================ */
-let uploadTypeFilter='all';
-async function pageUpload(){
-  const works = (await Store.getWorks()).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  const filtered = uploadTypeFilter==='all'? works : works.filter(w=>w.type===uploadTypeFilter);
-  setView(`
-    ${topbar('مجلد روابط')}
-    <div class="upload-hero">
-      <p>هنا تضيف أعمال مانجا ومانهوا مع رابط الموقع المصدر الذي أُخذت منه، وترفع فصولها. الأعمال المضافة هنا تظهر تلقائياً في كل أقسام التطبيق، ورابط المصدر يظهر لزوار صفحة التفاصيل.
-      ${Store.isShared? ' هذي البيانات مشتركة الآن — كل من يفتح التطبيق يشوفها.' : ' تنبيه: التطبيق حالياً بوضع محلي، يعني هذي البيانات تظهر على جهازك بس (راجع config.js لتفعيل المشاركة).'}</p>
-    </div>
-    <div class="type-switch">
-      <button class="${uploadTypeFilter==='all'?'active':''}" data-tf="all">الكل</button>
-      <button class="${uploadTypeFilter==='مانجا'?'active':''}" data-tf="مانجا">مانجا</button>
-      <button class="${uploadTypeFilter==='مانهوا'?'active':''}" data-tf="مانهوا">مانهوا</button>
-    </div>
-    <div style="padding:0 16px 4px"><button class="btn btn-outline btn-block" id="bulkBtn">${ICON.plus} إضافة عدة أعمال دفعة وحدة (روابط فقط)</button></div>
-    ${filtered.length? filtered.map(uploadWorkCard).join('') : emptyState('لا توجد أعمال بعد','اضغط على زر "+ عمل جديد" بالأسفل للبدء')}
-    <div style="height:80px"></div>
-    <div class="fab"><button class="btn btn-accent btn-block" id="newWorkBtn">${ICON.plus} عمل جديد</button></div>
-  `);
-  document.querySelectorAll('[data-tf]').forEach(b=> b.onclick=()=>{ uploadTypeFilter=b.dataset.tf; pageUpload(); });
-  document.getElementById('newWorkBtn').onclick = openNewWorkModal;
-  document.getElementById('bulkBtn').onclick = openBulkAddModal;
-  document.querySelectorAll('[data-addch]').forEach(b=> b.onclick=(e)=>{ e.stopPropagation(); openAddChapterModal(b.dataset.addch); });
-  document.querySelectorAll('[data-editwork]').forEach(b=> b.onclick=async (e)=>{
-    e.stopPropagation();
-    const w = await Store.getWork(b.dataset.editwork);
-    if(w) openNewWorkModal(w);
-  });
-  document.querySelectorAll('[data-delwork]').forEach(b=> b.onclick=async (e)=>{
-    e.stopPropagation();
-    if(!confirm('حذف هذا العمل وكل فصوله؟')) return;
-    const chs = await Store.getChapters(b.dataset.delwork);
-    for(const c of chs) await Store.deleteChapter(c.id);
-    await Store.deleteWork(b.dataset.delwork);
-    toast('تم الحذف'); pageUpload();
-  });
-  document.querySelectorAll('[data-openwork]').forEach(el=> el.onclick=()=> nav({name:'details', id:el.dataset.openwork, tab:'details'}));
-}
-
-function uploadWorkCard(w){
-  const cover = w.cover? `<img src="${w.cover}">` : `<div class="ph">${esc(w.title)}</div>`;
-  return `<div class="upload-work">
-    <div class="upload-work-head" data-openwork="${w.id}">
-      ${cover}
-      <div class="upload-work-body">
-        <h4>${esc(w.title)}</h4>
-        <div class="sub">${esc(w.type)} • ${esc(w.status)} • ${w.chapters||0} فصل</div>
-        ${w.sourceUrl? `<div class="sub" style="color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ICON.link}<span>${esc(w.sourceUrl)}</span></div>`:'<div class="sub" style="color:var(--danger)">بدون رابط مصدر</div>'}
-      </div>
-    </div>
-    <div class="upload-work-actions">
-      <button class="btn btn-outline" data-editwork="${w.id}">تعديل</button>
-      <button class="btn btn-outline" data-addch="${w.id}">${ICON.upload} فصل</button>
-      <button class="btn btn-outline" style="color:var(--danger)" data-delwork="${w.id}">${ICON.trash}</button>
-    </div>
-  </div>`;
-}
-
 function showModal(html){
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('modalOverlay').classList.add('show');
 }
 function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); }
-
-/* يقبل عمل موجود (existing) للتعديل، أو بدون أي شي لإنشاء عمل جديد */
-function openNewWorkModal(existing){
-  const isEdit = !!existing;
-  const w0 = existing || {};
-  showModal(`
-    <h3>${isEdit? 'تعديل العمل':'عمل جديد'}</h3>
-    <div class="field"><label>رابط الموقع المصدر (الصفحة التي أُخذ منها العمل)</label>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="nw_sourceUrl" placeholder="https://example.com/manga-name" dir="ltr" style="text-align:left;flex:1" value="${esc(w0.sourceUrl||'')}">
-        <button class="btn btn-outline" id="nw_fetchBtn" style="flex:none;padding:10px 12px">${ICON.link} جلب</button>
-      </div>
-      <div style="font-size:11px;color:var(--faint);margin-top:5px">يجيب فقط عنوان العمل وصورة الغلاف والوصف من هذي الصفحة تحديداً، وتراجعها قبل الحفظ — ما يسحب فصول ولا باقي أعمال الموقع.</div>
-    </div>
-    <div class="field"><label>عنوان العمل</label><input type="text" id="nw_title" placeholder="مثال: ظل التاج المفقود" value="${esc(w0.title||'')}"></div>
-    <div id="nw_titleWarn" style="display:none;color:var(--danger);font-size:11.5px;margin:-8px 0 10px">هذا يبدو رابط مو عنوان — انسخه لحقل "رابط الموقع المصدر" فوك واكتب عنوان العمل الحقيقي هنا.</div>
-    <div class="field"><label>العنوان بالإنجليزية (اختياري)</label><input type="text" id="nw_titleEn" value="${esc(w0.titleEn||'')}"></div>
-    <div class="field"><label>النوع</label>
-      <div class="radio-row">
-        <label><input type="radio" name="nw_type" value="مانجا" ${(!w0.type||w0.type==='مانجا')?'checked':''}><span>مانجا</span></label>
-        <label><input type="radio" name="nw_type" value="مانهوا" ${w0.type==='مانهوا'?'checked':''}><span>مانهوا</span></label>
-        <label><input type="radio" name="nw_type" value="مانها" ${w0.type==='مانها'?'checked':''}><span>مانها</span></label>
-      </div>
-    </div>
-    <div class="field"><label>حالة العمل</label>
-      <div class="radio-row">
-        <label><input type="radio" name="nw_status" value="مستمر" ${(!w0.status||w0.status==='مستمر')?'checked':''}><span>مستمر</span></label>
-        <label><input type="radio" name="nw_status" value="مكتمل" ${w0.status==='مكتمل'?'checked':''}><span>مكتمل</span></label>
-        <label><input type="radio" name="nw_status" value="متوقف" ${w0.status==='متوقف'?'checked':''}><span>متوقف</span></label>
-      </div>
-    </div>
-    <div class="field"><label>التصنيفات (افصل بينها بفاصلة)</label><input type="text" id="nw_genres" placeholder="أكشن، خيال، دراما" value="${esc((w0.genres||[]).join('، '))}"></div>
-    <div class="field"><label>تاريخ الفصل القادم (اختياري)</label><input type="date" id="nw_nextDate" value="${esc(w0.nextReleaseDate||'')}"></div>
-    <div class="field"><label>الوصف</label><textarea id="nw_desc" placeholder="نبذة عن القصة...">${esc(w0.desc||'')}</textarea></div>
-    <div class="field"><label>غلاف العمل</label>
-      <div class="filepick" id="nw_coverPick">${w0.cover? `<img src="${w0.cover}" style="max-height:90px;border-radius:6px">` : ICON.image+'<div style="margin-top:6px">اضغط لاختيار صورة الغلاف، أو استخدم زر "جلب" فوك</div>'}</div>
-      <input type="file" id="nw_cover" accept="image/*" class="hidden">
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeModal()">إلغاء</button>
-      <button class="btn btn-accent" id="nw_save">${isEdit?'حفظ التعديلات':'حفظ العمل'}</button>
-    </div>
-  `);
-  const coverInput = document.getElementById('nw_cover');
-  document.getElementById('nw_coverPick').onclick = ()=>coverInput.click();
-  let coverData = w0.cover || null;
-  coverInput.onchange = async ()=>{
-    if(coverInput.files[0]){
-      coverData = await fileToDataURL(coverInput.files[0]);
-      document.getElementById('nw_coverPick').innerHTML = `<img src="${coverData}" style="max-height:90px;border-radius:6px">`;
-    }
-  };
-
-  const titleInput = document.getElementById('nw_title');
-  const warnEl = document.getElementById('nw_titleWarn');
-  const looksLikeUrl = (s)=> /^https?:\/\//i.test(s.trim());
-  titleInput.oninput = ()=>{ warnEl.style.display = looksLikeUrl(titleInput.value) ? 'block':'none'; };
-
-  document.getElementById('nw_fetchBtn').onclick = async ()=>{
-    const url = document.getElementById('nw_sourceUrl').value.trim();
-    if(!url){ toast('حط رابط الصفحة أول'); return; }
-    const btn = document.getElementById('nw_fetchBtn');
-    const oldLabel = btn.innerHTML; btn.innerHTML = '...'; btn.disabled = true;
-    try{
-      const r = await fetch('/.netlify/functions/fetch-meta?url='+encodeURIComponent(url));
-      const data = await r.json();
-      if(data.error){ toast(data.error); }
-      else {
-        if(data.title && !titleInput.value.trim()) titleInput.value = data.title;
-        if(data.description && !document.getElementById('nw_desc').value.trim()) document.getElementById('nw_desc').value = data.description;
-        if(data.image){ coverData = data.image; document.getElementById('nw_coverPick').innerHTML = `<img src="${data.image}" style="max-height:90px;border-radius:6px">`; }
-        warnEl.style.display='none';
-        toast('تم جلب المعلومات — راجعها قبل الحفظ');
-      }
-    }catch(e){
-      toast('هذي الميزة تحتاج نشر التطبيق على Netlify (ما تشتغل وأنت تجرب محلياً بدون رفع)');
-    }
-    btn.innerHTML = oldLabel; btn.disabled = false;
-  };
-
-  document.getElementById('nw_save').onclick = async ()=>{
-    const title = titleInput.value.trim();
-    if(!title){ toast('الرجاء إدخال عنوان العمل'); return; }
-    if(looksLikeUrl(title)){ toast('عنوان العمل ما يصير يكون رابط — صححه أول'); return; }
-    const type = document.querySelector('[name=nw_type]:checked').value;
-    const status = document.querySelector('[name=nw_status]:checked').value;
-    const genres = document.getElementById('nw_genres').value.split('،').join(',').split(',').map(s=>s.trim()).filter(Boolean);
-    const w = Object.assign({}, w0, {
-      id: w0.id || uid(), title, titleEn: document.getElementById('nw_titleEn').value.trim(),
-      type, status, genres, desc: document.getElementById('nw_desc').value.trim(),
-      sourceUrl: document.getElementById('nw_sourceUrl').value.trim(),
-      nextReleaseDate: document.getElementById('nw_nextDate').value,
-      cover: coverData,
-      source: w0.source || (type==='مانهوا'?'ويب تون':'مانجا ويب'),
-      publisher: w0.publisher || 'رفع شخصي',
-      from: w0.from || new Date().getFullYear().toString(),
-      chapters: w0.chapters||0,
-      avgRating: w0.avgRating || (7+Math.random()*2),
-      dist: w0.dist || null,
-      createdAt: w0.createdAt || Date.now(), updatedAt: Date.now()
-    });
-    if(!w.dist) w.dist = seededDist(w.id);
-    await Store.putWork(w);
-    closeModal(); toast(isEdit? 'تم حفظ التعديلات':'تمت إضافة العمل بنجاح'); pageUpload();
-  };
-}
-
-function openAddChapterModal(workId){
-  showModal(`
-    <h3>إضافة فصل جديد</h3>
-    <div class="field"><label>رقم الفصل</label><input type="text" id="ac_num" inputmode="numeric" placeholder="1"></div>
-    <div class="field"><label>عنوان الفصل (اختياري)</label><input type="text" id="ac_title"></div>
-    <div class="field"><label>رابط الفصل عند المصدر (اختياري)</label><input type="text" id="ac_sourceUrl" placeholder="https://example.com/chapter-1" dir="ltr" style="text-align:left"></div>
-    <div class="field"><label>صفحات الفصل (يمكن اختيار عدة صور — اختياري إذا وضعت رابط الفصل)</label>
-      <div class="filepick small" id="ac_pick">${ICON.upload}<div style="margin-top:4px">اضغط لاختيار صور الصفحات</div></div>
-      <input type="file" id="ac_files" accept="image/*" multiple class="hidden">
-      <div class="file-list" id="ac_fileList"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeModal()">إلغاء</button>
-      <button class="btn btn-accent" id="ac_save">حفظ الفصل</button>
-    </div>
-  `);
-  const filesInput = document.getElementById('ac_files');
-  document.getElementById('ac_pick').onclick=()=>filesInput.click();
-  filesInput.onchange = ()=>{
-    document.getElementById('ac_fileList').innerHTML = [...filesInput.files].map(f=>`<span>${esc(f.name)}</span>`).join('');
-  };
-  document.getElementById('ac_save').onclick = async ()=>{
-    const w = await Store.getWork(workId);
-    const num = Number(document.getElementById('ac_num').value) || ((w.chapters||0)+1);
-    const title = document.getElementById('ac_title').value.trim();
-    const sourceUrl = document.getElementById('ac_sourceUrl').value.trim();
-    const files = [...filesInput.files];
-    if(!files.length && !sourceUrl){ toast('أضف صور الصفحات أو رابط الفصل على الأقل'); return; }
-    const pages = [];
-    for(const f of files){ pages.push(await fileToDataURL(f)); }
-    await Store.putChapter({id:uid(), workId, number:num, title, sourceUrl, pages, createdAt:Date.now()});
-    w.chapters = (w.chapters||0)+1; w.updatedAt=Date.now();
-    if(!w.cover && pages[0]) w.cover = pages[0];
-    await Store.putWork(w);
-    closeModal(); toast('تم حفظ الفصل بنجاح'); pageUpload();
-  };
-}
-
-/* إضافة عدة أعمال دفعة وحدة عن طريق لصق قائمة روابط — بديل سريع وآمن
-   بدل الجلب الآلي الكامل من مواقع أخرى (غير ممكن تقنياً وقانونياً بأمان) */
-function openBulkAddModal(){
-  showModal(`
-    <h3>إضافة عدة أعمال دفعة وحدة</h3>
-    <p style="font-size:12.5px;color:var(--dim);line-height:1.8;margin-bottom:12px">
-      اكتب سطر لكل عمل بهذا الشكل: <b>العنوان</b> ثم علامة <b>|</b> ثم <b>رابط المصدر</b>.<br>
-      مثال:<br>
-      ظل التاج المفقود | https://example.com/shadow<br>
-      قلب من حديد | https://example.com/heart
-    </p>
-    <div class="field"><label>النوع لكل الأعمال بهذه الدفعة</label>
-      <div class="radio-row">
-        <label><input type="radio" name="bk_type" value="مانجا" checked><span>مانجا</span></label>
-        <label><input type="radio" name="bk_type" value="مانهوا"><span>مانهوا</span></label>
-      </div>
-    </div>
-    <div class="field"><label>القائمة</label><textarea id="bk_text" style="min-height:140px" placeholder="عنوان العمل | https://..."></textarea></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeModal()">إلغاء</button>
-      <button class="btn btn-accent" id="bk_save">إضافة الكل</button>
-    </div>
-  `);
-  document.getElementById('bk_save').onclick = async ()=>{
-    const type = document.querySelector('[name=bk_type]:checked').value;
-    const lines = document.getElementById('bk_text').value.split('\n').map(l=>l.trim()).filter(Boolean);
-    if(!lines.length){ toast('أضف سطر واحد على الأقل'); return; }
-    let count=0, skipped=0;
-    for(const line of lines){
-      const parts = line.split('|').map(s=>s.trim());
-      let title = parts[0]; let sourceUrl = parts[1]||'';
-      if(!title) continue;
-      // إذا كتب رابط بس بدون عنوان، نحط الرابط بخانة المصدر مو بالعنوان
-      if(/^https?:\/\//i.test(title)){
-        if(!sourceUrl) sourceUrl = title;
-        skipped++; continue; // نتجاوزه بدل ما نحفظ عنوان مكسور — يحتاج عنوان حقيقي
-      }
-      const w = {
-        id: uid(), title, titleEn:'', type, status:'مستمر', genres:[], desc:'',
-        sourceUrl, nextReleaseDate:'', cover:null, source: type==='مانهوا'?'ويب تون':'مانجا ويب',
-        publisher:'رفع شخصي', from:new Date().getFullYear().toString(), chapters:0,
-        avgRating:(7+Math.random()*2), dist:null, createdAt:Date.now(), updatedAt:Date.now()
-      };
-      w.dist = seededDist(w.id);
-      await Store.putWork(w);
-      count++;
-    }
-    closeModal();
-    toast(skipped? `تمت إضافة ${count} عمل — تجاوزت ${skipped} سطر بلا عنوان واضح`:`تمت إضافة ${count} عمل`);
-    pageUpload();
-  };
-}
-
 
 /* ---------- إظهار المحتوى ---------- */
 function setView(html){ document.getElementById('app').innerHTML = html; renderDrawer(); }
@@ -957,7 +695,6 @@ async function render(){
     case 'search': return pageSearch();
     case 'details': return pageDetails(route.id, route.tab);
     case 'reader': return pageReader(route.workId, route.chId);
-    case 'upload': return pageUpload();
     case 'schedule': return pageSchedule();
     case 'favChars': return pagePlaceholder('شخصياتي المفضلة','يحتاج بناء نظام شخصيات كامل — قادم بتحديث لاحق');
     case 'popularChars': return pagePlaceholder('الشخصيات الاكثر شعبية','يحتاج بناء نظام شخصيات كامل — قادم بتحديث لاحق');
