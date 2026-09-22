@@ -22,8 +22,33 @@
    يكدر يضيف/يعدّل/يحذف من المكتبة (مو بس يقرأ). هذا مناسب هسه لمرحلة
    التجربة بينك وبين صديقك. لما تريد تطلق التطبيق لعدد اكبر من الناس،
    خبرني ونضيف نظام تسجيل دخول للمشرف بس يقدر يضيف/يحذف.
+
+   نفس الملاحظة تنطبق على Firebase: لازم تتأكد إن قواعد أمان Firestore
+   (Firebase Console ← Firestore Database ← Rules) تسمح بالقراءة والكتابة،
+   وإلا التطبيق ما يقدر يحفظ ولا يقرأ شي. الصق هذا بمربع القواعد واضغط نشر:
+
+     rules_version = '2';
+     service cloud.firestore {
+       match /databases/{database}/documents {
+         match /{document=**} {
+           allow read, write: if true;
+         }
+       }
+     }
    ===================================================================== */
 const CONFIG = {
-  SUPABASE_URL: '',   // مثال: https://xxxxxxxxxxxx.supabase.co
-  SUPABASE_KEY: '',   // مفتاح anon public (مو service role)
+  // Supabase (اختياري — احتياطي إذا ما اشتغل Firebase لأي سبب)
+  SUPABASE_URL: '',
+  SUPABASE_KEY: '',
+
+  // Firebase Firestore — مشروع Pure Library (مفعّل الآن، هذا التخزين المستخدم فعلياً)
+  firebaseConfig: {
+    apiKey: "AIzaSyBkaDrsjial5W6xyXPPt1-trJhR7E9n2p4",
+    authDomain: "pure-library-2d45d.firebaseapp.com",
+    projectId: "pure-library-2d45d",
+    storageBucket: "pure-library-2d45d.firebasestorage.app",
+    messagingSenderId: "953898341477",
+    appId: "1:953898341477:web:85409f5597f894ff13e28c",
+    measurementId: "G-YS8VFDXVKZ"
+  },
 };
