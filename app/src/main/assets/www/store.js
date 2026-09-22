@@ -6,23 +6,23 @@
    2) Supabase — إذا كانت CONFIG.SUPABASE_URL و CONFIG.SUPABASE_KEY موجودة
    3) IndexedDB محلي — إذا ماكو ولا وحدة مفعّلة (تخزين على جهاز المستخدم بس)
 
-   مجموعة الأعمال بـ Firestore اسمها "مانغا" (نفس المجموعة اللي تكتبلها
-   أي أداة خارجية ترفع بيانات — متل دالة uploadMangaToFirebase). أي
-   مستند فيها يُطبَّع تلقائياً (normalizeWork) قبل ما يوصل لباقي
-   التطبيق، فلو نقصت حقول (type, status, latestChapter...) ينعبّالها
-   قيم افتراضية معقولة بدل ما تطلع ناقصة أو تكسر العرض.
+   مجموعة الأعمال بـ Firestore اسمها بالضبط "manga" (بالحروف اللاتينية،
+   نفس اللي تشوفه بلوحة Firebase Console — راجعتها من صورة قاعدة بياناتك).
+   الفصول مخزّنة كمجموعة فرعية تحت كل مستند: manga/{workId}/chapters/{id}
+   (نفس البنية اللي شفناها بلوحتك، مو مجموعة منفصلة بحقل workId).
 
-   بكل الحالات، "التحميلات" (نظام تحميل الفصول للقراءة بدون إنترنت)
-   تبقى دائماً محلية على جهاز كل مستخدم، لأنها بطبيعتها شخصية.
+   ماكو أي بيانات وهمية (dummy) بهذا الملف إطلاقاً — إذا رجّعت المكتبة
+   فاضية، السبب فعلي: إما قاعدة البيانات فاضية بعد، أو صار خطأ بالاتصال
+   (يظهر بـ Store.error بعد init، وتقدر تطبعه بـ console لمعرفة السبب).
    ===================================================================== */
 const Store = (function () {
-  const WORKS_COLLECTION = 'مانغا';
+  const WORKS_COLLECTION = 'manga'; // بالحروف اللاتينية — يطابق Firestore Console بالضبط
   let mode = 'local'; // 'firebase' | 'supabase' | 'local'
   let sb = null;       // عميل Supabase
   let db = null;       // عميل Firestore
   let FS = null;       // دوال Firestore (collection, doc, getDoc, ...)
 
-  let ldb; // قاعدة بيانات محلية على جهاز المستخدم (دائماً للتحميلات، واحتياط للمكتبة)
+  let ldb; // قاعدة بيانات محلية على جهاز المستخدم (دائماً للتحميلات، واحتياط فقط لو ماكو أي اتصال)
   function openLocal() {
     return new Promise((resolve, reject) => {
       const r = indexedDB.open('pureMangaLocal', 1);
@@ -55,6 +55,7 @@ const Store = (function () {
   function normalizeWork(raw) {
     if (!raw) return raw;
     const w = Object.assign({}, raw);
+    if (!w.cover && w.coverUrl) w.cover = w.coverUrl; // الحقل ممكن يجي بأي وحدة من الاسمين
     if (w.sourceSite && !w.source) w.source = w.sourceSite;
     if (typeof w.chapters !== 'number') {
       const m = String(w.latestChapter || '').match(/(\d+)/);
@@ -68,10 +69,18 @@ const Store = (function () {
     if (!w.desc) w.desc = '';
     if (!w.publisher) w.publisher = w.source || '';
     if (!w.from) w.from = '';
+    if (!w.title) w.title = 'بدون عنوان';
     w.createdAt = toMillis(w.createdAt);
     w.updatedAt = toMillis(w.updatedAt);
     return w;
   }
+
+  const api = {
+    init, isShared: false, mode: 'local', error: null,
+    getWorks: null, getWork: null, putWork: null, deleteWork: null,
+    getChapters: null, getChapter: null, putChapter: null, deleteChapter: null,
+    getDownloads: null, getDownload: null, putDownload: null, deleteDownload: null,
+  };
 
   async function init() {
     await openLocal();
@@ -86,7 +95,8 @@ const Store = (function () {
         FS = fsMod;
         mode = 'firebase';
       } catch (e) {
-        console.error('تعذّر الاتصال بـ Firebase، رح نجرب البديل:', e);
+        api.error = 'تعذّر الاتصال بـ Firebase: ' + (e && e.message ? e.message : e);
+        console.error(api.error);
       }
     }
 
@@ -101,19 +111,27 @@ const Store = (function () {
   }
 
   /* ---------------- الأعمال ---------------- */
-  async function getWorks() {
+  api.getWorks = async function () {
+    let list;
     if (mode === 'firebase') {
-      const snap = await FS.getDocs(FS.collection(db, WORKS_COLLECTION));
-      return snap.docs.map((d) => normalizeWork(Object.assign({ id: d.id }, d.data())));
+      try {
+        const snap = await FS.getDocs(FS.collection(db, WORKS_COLLECTION));
+        list = snap.docs.map((d) => normalizeWork(Object.assign({ id: d.id }, d.data())));
+      } catch (e) {
+        api.error = 'تعذّر قراءة مجموعة "' + WORKS_COLLECTION + '": ' + (e && e.message ? e.message : e);
+        console.error(api.error);
+        list = [];
+      }
+    } else if (mode === 'supabase') {
+      const { data, error } = await sb.from('works').select('data');
+      if (error) { console.error(error); list = []; }
+      else list = (data || []).map((r) => normalizeWork(r.data));
+    } else {
+      list = (await idbGetAll('works')).map(normalizeWork);
     }
-    if (mode === 'supabase') {
-      const { data, error } = await sb.from('works').select('data').order('updated_at', { ascending: false });
-      if (error) { console.error(error); return []; }
-      return (data || []).map((r) => normalizeWork(r.data));
-    }
-    return (await idbGetAll('works')).map(normalizeWork);
-  }
-  async function getWork(id) {
+    return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  };
+  api.getWork = async function (id) {
     if (mode === 'firebase') {
       const d = await FS.getDoc(FS.doc(db, WORKS_COLLECTION, id));
       return d.exists() ? normalizeWork(Object.assign({ id: d.id }, d.data())) : undefined;
@@ -125,13 +143,13 @@ const Store = (function () {
     }
     const w = await idbGet('works', id);
     return w ? normalizeWork(w) : undefined;
-  }
-  async function putWork(w) {
+  };
+  api.putWork = async function (w) {
     w.updatedAt = Date.now();
     if (mode === 'firebase') {
       const { id } = w;
       const payload = Object.assign({}, w);
-      delete payload.id; // نفس منطق مستندات الأداة الخارجية — الـ id هو مسار المستند مو حقل بداخله
+      delete payload.id;
       await FS.setDoc(FS.doc(db, WORKS_COLLECTION, id), payload, { merge: true });
       return w;
     }
@@ -141,19 +159,23 @@ const Store = (function () {
       return w;
     }
     return idbPut('works', w);
-  }
-  async function deleteWork(id) {
+  };
+  api.deleteWork = async function (id) {
     if (mode === 'firebase') { await FS.deleteDoc(FS.doc(db, WORKS_COLLECTION, id)); return; }
     if (mode === 'supabase') { await sb.from('works').delete().eq('id', id); return; }
     return idbDelete('works', id);
-  }
+  };
 
-  /* ---------------- الفصول ---------------- */
-  async function getChapters(workId) {
+  /* ---------------- الفصول (مجموعة فرعية تحت كل عمل بـ Firestore) ---------------- */
+  api.getChapters = async function (workId) {
     if (mode === 'firebase') {
-      const q = FS.query(FS.collection(db, 'chapters'), FS.where('workId', '==', workId));
-      const snap = await FS.getDocs(q);
-      return snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+      try {
+        const snap = await FS.getDocs(FS.collection(db, WORKS_COLLECTION, workId, 'chapters'));
+        return snap.docs.map((d) => Object.assign({ id: d.id, workId }, d.data()));
+      } catch (e) {
+        console.error('تعذّر قراءة فصول العمل', workId, e);
+        return [];
+      }
     }
     if (mode === 'supabase') {
       const { data, error } = await sb.from('chapters').select('data').eq('work_id', workId);
@@ -161,11 +183,11 @@ const Store = (function () {
       return (data || []).map((r) => r.data);
     }
     return (await idbGetAll('chapters')).filter((c) => c.workId === workId);
-  }
-  async function getChapter(id) {
+  };
+  api.getChapter = async function (workId, id) {
     if (mode === 'firebase') {
-      const d = await FS.getDoc(FS.doc(db, 'chapters', id));
-      return d.exists() ? Object.assign({ id: d.id }, d.data()) : undefined;
+      const d = await FS.getDoc(FS.doc(db, WORKS_COLLECTION, workId, 'chapters', id));
+      return d.exists() ? Object.assign({ id: d.id, workId }, d.data()) : undefined;
     }
     if (mode === 'supabase') {
       const { data, error } = await sb.from('chapters').select('data').eq('id', id).maybeSingle();
@@ -173,13 +195,13 @@ const Store = (function () {
       return data.data;
     }
     return idbGet('chapters', id);
-  }
-  async function putChapter(c) {
+  };
+  api.putChapter = async function (c) {
     if (mode === 'firebase') {
-      const { id } = c;
+      const { id, workId } = c;
       const payload = Object.assign({}, c);
-      delete payload.id;
-      await FS.setDoc(FS.doc(db, 'chapters', id), payload, { merge: true });
+      delete payload.id; delete payload.workId;
+      await FS.setDoc(FS.doc(db, WORKS_COLLECTION, workId, 'chapters', id), payload, { merge: true });
       return c;
     }
     if (mode === 'supabase') {
@@ -188,24 +210,18 @@ const Store = (function () {
       return c;
     }
     return idbPut('chapters', c);
-  }
-  async function deleteChapter(id) {
-    if (mode === 'firebase') { await FS.deleteDoc(FS.doc(db, 'chapters', id)); return; }
+  };
+  api.deleteChapter = async function (workId, id) {
+    if (mode === 'firebase') { await FS.deleteDoc(FS.doc(db, WORKS_COLLECTION, workId, 'chapters', id)); return; }
     if (mode === 'supabase') { await sb.from('chapters').delete().eq('id', id); return; }
     return idbDelete('chapters', id);
-  }
+  };
 
   /* ---------------- التحميلات (محلية دائماً على جهاز المستخدم) ---------------- */
-  async function getDownloads() { return idbGetAll('downloads'); }
-  async function getDownload(id) { return idbGet('downloads', id); }
-  async function putDownload(d) { return idbPut('downloads', d); }
-  async function deleteDownload(id) { return idbDelete('downloads', id); }
+  api.getDownloads = async function () { return idbGetAll('downloads'); };
+  api.getDownload = async function (id) { return idbGet('downloads', id); };
+  api.putDownload = async function (d) { return idbPut('downloads', d); };
+  api.deleteDownload = async function (id) { return idbDelete('downloads', id); };
 
-  const api = {
-    init, isShared: false, mode: 'local',
-    getWorks, getWork, putWork, deleteWork,
-    getChapters, getChapter, putChapter, deleteChapter,
-    getDownloads, getDownload, putDownload, deleteDownload,
-  };
   return api;
 })();

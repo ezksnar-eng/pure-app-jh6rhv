@@ -77,29 +77,6 @@ const CustomLists = (function(){
   return {all, create, remove, toggleWork};
 })();
 
-/* ---------- بيانات مبدئية عند أول تشغيل (وضع محلي فقط) ---------- */
-async function seedIfEmpty(){
-  if(Store.isShared) return; // لا نملأ بيانات تجريبية على مكتبة مشتركة حقيقية
-  const works = await Store.getWorks();
-  if(works.length) return;
-  const demo = [
-    {title:'ظل التاج المفقود', titleEn:'Shadow of the Lost Crown', type:'مانهوا', status:'مستمر', genres:['أكشن','خيال','دراما'], desc:'بعد أن فقد عرشه في ليلة واحدة، يخوض الأمير كيان رحلة انتقام عبر ممالك مظلمة، حاملاً سراً قد يقلب موازين القوى في القارة بأكملها.', source:'ويب تون', sourceUrl:'https://example.com/shadow-of-the-lost-crown', publisher:'استوديو بيور', from:'2025', chapterCount:32},
-    {title:'أكاديمية السحرة الصامتين', titleEn:'Silent Mages Academy', type:'مانجا', status:'مكتمل', genres:['مدرسي','خيال','كوميديا'], desc:'في أكاديمية يُمنع فيها الكلام أثناء استخدام السحر، تكتشف الطالبة نور موهبة نادرة تجعلها محط أنظار الجميع.', source:'مانجا ويب', sourceUrl:'', publisher:'دار نشر الفجر', from:'2023', chapterCount:87},
-    {title:'قلب من حديد', titleEn:'Heart of Iron', type:'مانهوا', status:'مستمر', genres:['أكشن','رياضة'], desc:'حارس مرمى سابق يعود للملاعب بعد إصابة كادت تنهي مسيرته، ليواجه فريقاً جديداً وحلماً قديماً لم يمت بعد.', source:'ويب تون', sourceUrl:'https://example.com/heart-of-iron', publisher:'استوديو بيور', from:'2024', chapterCount:19, nextReleaseDate:''},
-  ];
-  for(const d of demo){
-    const w = Object.assign({
-      id:uid(), cover:null, chapters:d.chapterCount, avgRating:(7+Math.random()*2),
-      dist:null, nextReleaseDate:'', createdAt:Date.now(), updatedAt:Date.now()
-    }, d);
-    w.dist = seededDist(w.id);
-    await Store.putWork(w);
-    const chN = Math.min(w.chapterCount, 12);
-    for(let i=1;i<=chN;i++){
-      await Store.putChapter({id:uid(), workId:w.id, number:i, title:'', sourceUrl:'', pages:[], createdAt:Date.now()-i*1000});
-    }
-  }
-}
 function seededDist(id){
   let seed=0; for(const c of id) seed+=c.charCodeAt(0);
   const r=(n)=>{ seed=(seed*9301+49297)%233280; return Math.floor((seed/233280)*n); };
@@ -202,10 +179,13 @@ function emptyState(title, sub){
 
 /* ---------- الرئيسية ---------- */
 async function pageHome(){
-  const works = (await Store.getWorks()).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const works = await Store.getWorks(); // مرتبة تلقائياً حسب createdAt تنازلياً من داخل Store
+  const emptyMsg = Store.error
+    ? ('تعذّر الاتصال بقاعدة البيانات — ' + Store.error)
+    : (Store.isShared ? 'المكتبة فاضية حالياً بقاعدة البيانات' : 'وضع محلي — ماكو اتصال بقاعدة بيانات مفعّل بملف config.js');
   setView(`
     ${topbar('أخر التحديثات',{search:true})}
-    ${works.length? `<div class="grid">${works.map(workCard).join('')}</div>` : emptyState('لا توجد أعمال بعد','الأعمال تظهر هنا تلقائياً بمجرد إضافتها لقاعدة البيانات')}
+    ${works.length? `<div class="grid">${works.map(workCard).join('')}</div>` : emptyState('لا توجد أعمال بعد', emptyMsg)}
   `);
   bindCards(document);
 }
@@ -706,7 +686,10 @@ async function render(){
 /* ---------- بدء التشغيل ---------- */
 (async function init(){
   await Store.init();
-  await seedIfEmpty();
+  if(Store.error){
+    // فشل الاتصال بقاعدة البيانات — نطلع تنبيه واضح بدل ما نسكت ونرجع لبيانات محلية فاضية بصمت
+    console.error('[مانجا بيور] ', Store.error);
+  }
   history.replaceState({route}, '', location.href);
   render();
 })();
